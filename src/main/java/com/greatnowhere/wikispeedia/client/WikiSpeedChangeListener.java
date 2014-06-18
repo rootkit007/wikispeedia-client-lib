@@ -40,9 +40,13 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 	protected GeoFencer gf;
 	protected Context ctx;
 	protected EventBus eventBus;
+	/**
+	 * Radius for the current request
+	 */
+	protected float requestRadius = WikiSpeediaClient.PRIMARY_RADIUS_METERS;
 	
-	public WikiSpeedChangeListener(Context ctx) {
-		client = new WikiSpeediaClient(ctx);
+	public WikiSpeedChangeListener(Context ctx, String userName) {
+		client = new WikiSpeediaClient(ctx,userName);
 		this.ctx = ctx;
 		int gpsCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(ctx);
 		if ( gpsCode == ConnectionResult.SUCCESS ) {
@@ -82,12 +86,22 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 	 * Sets up geofence around current location
 	 */
 	private void setUpPrimaryGeofence() {
-		gf.addFence(new GeoFence(GeoFencer.FenceType.PRIMARY, lC.getLastLocation(), (float) (WikiSpeediaClient.PRIMARY_RADIUS_METERS/2)), 
+		gf.addFence(new GeoFence(GeoFencer.FenceType.PRIMARY, lC.getLastLocation(), requestRadius), 
 				getPrimaryAreaIntent());
 		// get marker fences in the vicinity
 		client.getMarker(lC.getLastLocation(), new RequestListener<Response>() {
 			public void onRequestSuccess(Response result) {
 				Log.i(TAG,"Got WS result, " + ( result.markers != null ? result.markers.size() : 0 ) + " markers");
+				if ( result.markers.size() > WikiSpeediaClient.MAX_GEOFENCES ) {
+					requestRadius *= (1 - WikiSpeediaClient.RADIUS_ADJUSTMENT_PCT );
+					setUpPrimaryGeofence();
+					return;
+				}
+				if ( result.markers.size() < WikiSpeediaClient.MIN_GEOFENCES ) {
+					requestRadius *= (1 + WikiSpeediaClient.RADIUS_ADJUSTMENT_PCT );
+					setUpPrimaryGeofence();
+					return;
+				}
 				nearbyMarkers = result.markers;
 				setUpMarkerFences();
 			}
@@ -98,13 +112,18 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 	}
 	
 	private void setUpMarkerFences() {
+		Log.i(TAG,"Adding marker fences");
+		int numFences = 0;
 		gf.removeMarkerFences();
 		if ( nearbyMarkers != null ) {
 			for ( Marker m : nearbyMarkers ) {
-				if ( m.getDeletedOnDate() == null ) 
+				if ( m.getDeletedOnDate() == null ) { 
 					gf.addFence(new GeoFence(m), getMarkerAreaIntent());
+					numFences++;
+				}
 			}
 		}
+		Log.i(TAG,"Added " + numFences + " marker fences");
 	}
 	
 	/**

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 import org.wikispeedia.models.Marker;
 
@@ -44,8 +45,9 @@ public class GeoFencer {
 	
 	public void removeMarkerFences() {
 		for (String fenceId : fences.keySet() ) {
-			if ( fences.get(fenceId).fenceType == FenceType.MARKER )
+			if ( fences.get(fenceId).fenceType == FenceType.MARKER ) {
 				removeFence(fenceId);
+			}
 		}
 	}
 	
@@ -56,9 +58,11 @@ public class GeoFencer {
 	}
 	
 	public void removeFence(GeoFence f) {
+		final CountDownLatch l =  new CountDownLatch(1);
 		lc.removeGeofences(obj2List(f.getId()), new LocationClient.OnRemoveGeofencesResultListener() {
 			public void onRemoveGeofencesByRequestIdsResult(int statusCode,
 					String[] geofenceRequestIds) {
+					l.countDown();
 			}
 			
 			public void onRemoveGeofencesByPendingIntentResult(int statusCode,
@@ -66,6 +70,10 @@ public class GeoFencer {
 			}
 		});
 		fences.remove(f.getId());
+		try {
+			l.await();
+		} catch (InterruptedException e) {
+		}
 	}
 	
 	@SuppressWarnings("unchecked")
