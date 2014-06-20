@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Looper;
 import android.util.Log;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -48,6 +49,7 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 	public WikiSpeedChangeListener(Context ctx, String userName) {
 		client = new WikiSpeediaClient(ctx,userName);
 		this.ctx = ctx;
+		checkLooper();
 		int gpsCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(ctx);
 		if ( gpsCode == ConnectionResult.SUCCESS ) {
 			lC = new LocationClient(ctx, this, this);
@@ -60,7 +62,13 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 		}
 	}
 	
+	protected void checkLooper() {
+		if ( Looper.myLooper() == null )
+			Looper.prepare();
+	}
+	
 	public void stop() {
+		checkLooper();
 		gf.removeMarkerFences();
 		gf.removeFence(gf.primaryFenceId.toString());
 		client.stop();
@@ -85,7 +93,8 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 	/**
 	 * Sets up geofence around current location
 	 */
-	private void setUpPrimaryGeofence() {
+	private synchronized void setUpPrimaryGeofence() {
+		Log.i(TAG,"Adding primary fence");
 		gf.addFence(new GeoFence(GeoFencer.FenceType.PRIMARY, lC.getLastLocation(), requestRadius), 
 				getPrimaryAreaIntent());
 		// get marker fences in the vicinity
@@ -111,7 +120,7 @@ public class WikiSpeedChangeListener implements GooglePlayServicesClient.Connect
 		});
 	}
 	
-	private void setUpMarkerFences() {
+	private synchronized void setUpMarkerFences() {
 		Log.i(TAG,"Adding marker fences");
 		int numFences = 0;
 		gf.removeMarkerFences();

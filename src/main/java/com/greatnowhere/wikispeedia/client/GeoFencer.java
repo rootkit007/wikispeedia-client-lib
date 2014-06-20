@@ -1,25 +1,28 @@
 package com.greatnowhere.wikispeedia.client;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.wikispeedia.models.Marker;
 
 import android.app.PendingIntent;
 import android.location.Location;
+import android.util.Log;
 
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.LocationClient;
 
 public class GeoFencer {
 
-	protected Map<String, GeoFence> fences = new HashMap<String, GeoFence>();
+	protected Map<String, GeoFence> fences = new ConcurrentHashMap<String, GeoFence>();
 	protected LocationClient lc;
 	public final UUID primaryFenceId = UUID.randomUUID();
+	private static final String TAG = GeoFencer.class.getCanonicalName();
 	
 	public GeoFencer(LocationClient lc) {
 		this.lc = lc;
@@ -43,7 +46,8 @@ public class GeoFencer {
 		return fences.get(id);
 	}
 	
-	public void removeMarkerFences() {
+	public synchronized void removeMarkerFences() {
+		Log.i(TAG,"Removing all marker fences");
 		for (String fenceId : fences.keySet() ) {
 			if ( fences.get(fenceId).fenceType == FenceType.MARKER ) {
 				removeFence(fenceId);
@@ -67,11 +71,13 @@ public class GeoFencer {
 			
 			public void onRemoveGeofencesByPendingIntentResult(int statusCode,
 					PendingIntent pendingIntent) {
+				l.countDown();
 			}
 		});
 		fences.remove(f.getId());
 		try {
-			l.await();
+			if ( !l.await(100, TimeUnit.MILLISECONDS) ) 
+				Log.w(TAG,"Timeout while removing geofence " + f.getId());
 		} catch (InterruptedException e) {
 		}
 	}
